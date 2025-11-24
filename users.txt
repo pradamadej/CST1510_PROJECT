@@ -1,0 +1,3 @@
+# users.csv format: username,salt,hash
+# This file is plaintext for examples; store credentials securely in production.
+
