@@ -1,6 +1,6 @@
 import sqlite3
 import os
-from database_manager import DatabaseManager  # Import the class we created
+from database import DatabaseManager  # Import the class we created
 
 def migrate_users_from_file(db_manager, file_path="users.txt"):
     """

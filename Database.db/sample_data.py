@@ -1,6 +1,6 @@
 # Load sample data for testing
 
-from database_manager import DatabaseManager
+from database import DatabaseManager
 import os
 
 def create_sample_csv_files():
