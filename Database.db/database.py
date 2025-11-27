@@ -301,6 +301,30 @@ class DatabaseManager:
         """Support context manager protocol."""
         self.close()
 
+        def get_cyber_incidents(self, filters: dict = None) -> List[Tuple]:
+    """
+    Retrieve cyber incidents with optional filtering.
+    
+    Args:
+        filters (dict): Optional filters like {'status': 'Open', 'severity': 'High'}
+        
+    Returns:
+        List[Tuple]: Cyber incident records
+    """
+    base_query = "SELECT * FROM cyber_incidents"
+    params = []
+    
+    if filters:
+        where_clauses = []
+        for key, value in filters.items():
+            where_clauses.append(f"{key} = ?")
+            params.append(value)
+        
+        if where_clauses:
+            base_query += " WHERE " + " AND ".join(where_clauses)
+    
+    base_query += " ORDER BY date_reported DESC"
+    return self.execute_query(base_query, tuple(params)) or []
 
 # Example usage and testing
 if __name__ == "__main__":
