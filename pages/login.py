@@ -78,7 +78,18 @@ except ImportError:
         
         def execute_query(self, query, params=()):
             """Fallback execute_query method."""
+            # For login queries
+            if "SELECT * FROM users WHERE username =" in query:
+                username = params[0]
+                user_data = self.demo_users.get(username)
+                if user_data:
+                    return [(user_data['id'], username, user_data['password_hash'], 
+                            user_data['role'], user_data['created_at'])]
             return []
+        
+        def create_tables(self):
+            """Fallback create_tables method."""
+            return True
         
         def close(self):
             """Fallback close method."""
@@ -107,12 +118,13 @@ def verify_password(plain_password, hashed_password):
         bool: True if password matches, False otherwise
     """
     try:
+        # For demo purposes, also accept plain 'password123' without bcrypt
+        if plain_password == "password123" and hashed_password == '$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW':
+            return True
+        
         return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
     except Exception as e:
         st.error(f"Password verification error: {e}")
-        # For demo purposes, if bcrypt fails, check if it's the demo password
-        if plain_password == "password123":
-            return True
         return False
 
 def login_user(username, password):
@@ -129,12 +141,26 @@ def login_user(username, password):
     try:
         db = DatabaseManager()
         
+        # First, ensure tables exist
+        try:
+            db.create_tables()
+        except:
+            pass  # Tables might already exist
+        
         # Get user from database
         user = db.get_user_by_username(username)
         db.close()
         
         if user:
-            user_id, stored_username, stored_hash, role, created_at = user
+            # Check how many fields we have in the user tuple
+            if len(user) >= 5:
+                user_id, stored_username, stored_hash, role, created_at = user[:5]
+            elif len(user) >= 3:
+                user_id, stored_username, stored_hash = user[:3]
+                role = "user"  # Default role
+                created_at = "2024-01-01 00:00:00"
+            else:
+                return False, "Invalid user data format"
             
             # Verify password
             if verify_password(password, stored_hash):
@@ -224,6 +250,8 @@ def show_user_roles_info():
         | `john_analyst` | `password123` | Cyber Analyst | Cybersecurity Dashboard |
         | `sara_scientist` | `password123` | Data Scientist | Data Science Dashboard |
         | `mike_admin` | `password123` | IT Administrator | IT Operations Dashboard |
+        
+        ### Alternative Demo Accounts:
         | `Joel_analyst` | `password123` | Cyber Analyst | Cybersecurity Dashboard |
         | `Sara_scientist` | `password123` | Data Scientist | Data Science Dashboard |
         | `Daniel_admin` | `password123` | IT Administrator | IT Operations Dashboard |
@@ -302,6 +330,12 @@ def main():
     # Database availability warning
     if not DB_MANAGER_AVAILABLE:
         st.warning("⚠️ Using fallback DatabaseManager with demo accounts only")
+    else:
+        # Try to create demo users if they don't exist
+        try:
+            create_demo_users()
+        except:
+            pass
     
     # Handle form actions
     if clear_button:
@@ -349,67 +383,49 @@ def create_demo_users():
     try:
         db = DatabaseManager()
         
+        # First ensure tables exist
+        db.create_tables()
+        
         demo_users = [
-            {
-                'username': 'john_analyst',
-                'password': 'password123',
-                'role': 'cyber_analyst'
-            },
-            {
-                'username': 'sara_scientist', 
-                'password': 'password123',
-                'role': 'data_scientist'
-            },
-            {
-                'username': 'mike_admin',
-                'password': 'password123', 
-                'role': 'it_administrator'
-            },
-            {
-                'username': 'Joel_analyst',
-                'password': 'password123',
-                'role': 'cyber_analyst'
-            },
-            {
-                'username': 'Sara_scientist',
-                'password': 'password123',
-                'role': 'data_scientist'
-            },
-            {
-                'username': 'Daniel_admin',
-                'password': 'password123',
-                'role': 'it_administrator'
-            }
+            ('john_analyst', 'password123', 'cyber_analyst'),
+            ('sara_scientist', 'password123', 'data_scientist'),
+            ('mike_admin', 'password123', 'it_administrator'),
+            ('Joel_analyst', 'password123', 'cyber_analyst'),
+            ('Sara_scientist', 'password123', 'data_scientist'),
+            ('Daniel_admin', 'password123', 'it_administrator')
         ]
         
         created_count = 0
-        for user_data in demo_users:
-            # Check if user exists - using get_user_by_username
-            existing = db.get_user_by_username(user_data['username'])
+        for username, password, role in demo_users:
+            # Check if user exists
+            existing = db.get_user_by_username(username)
             if not existing:
                 try:
                     # Hash password
-                    hashed_pw = bcrypt.hashpw(user_data['password'].encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                    hashed_pw = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
                     
-                    # Create user - using insert_record if available
-                    if hasattr(db, 'insert_record'):
-                        db.insert_record('users', {
-                            'username': user_data['username'],
-                            'password_hash': hashed_pw,
-                            'role': user_data['role']
-                        })
+                    # Insert user using execute_query directly
+                    query = "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)"
+                    result = db.execute_query(query, (username, hashed_pw, role))
+                    
+                    if result is None:  # Successful insert returns None
                         created_count += 1
-                    else:
-                        print(f"insert_record method not available in DatabaseManager")
+                        
                 except Exception as e:
-                    print(f"Error creating user {user_data['username']}: {e}")
+                    # If bcrypt fails, use pre-hashed password
+                    if "password123" in str(e).lower():
+                        hashed_pw = '$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW'
+                        query = "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)"
+                        result = db.execute_query(query, (username, hashed_pw, role))
+                        if result is None:
+                            created_count += 1
         
         db.close()
         if created_count > 0:
-            print(f"Created {created_count} demo users")
+            st.sidebar.success(f"Created {created_count} demo users")
             
     except Exception as e:
-        print(f"Error creating demo users: {e}")
+        st.sidebar.warning(f"Could not create demo users: {str(e)}")
 
 if __name__ == "__main__":
     main()
