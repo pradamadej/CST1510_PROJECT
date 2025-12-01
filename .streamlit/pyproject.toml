@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+
+[tool.setuptools]
+zip-safe = false
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["*"]
+exclude = ["tests", "tests.*"]
+
+[project]
+name = "cst1510_project"
+version = "1.0.0"
+dependencies = [
+    "streamlit==1.36.0",
+    "pandas==1.5.3",
+    "plotly==5.17.0",
+    "bcrypt==4.0.1",
+    "openai==0.28.1",
+    "numpy==1.24.3"
+]
