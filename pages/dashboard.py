@@ -1,174 +1,108 @@
-"""
-Dashboard Page - Updated for OpenAI 0.28.1
-"""
-
+# pages/dashboard.py
 import streamlit as st
-import pandas as pd
-import plotly.express as px
-
-# Page config
-st.set_page_config(
-    page_title="Dashboard",
-    page_icon="📊",
-    layout="wide"
-)
-
-# Check login
-if not st.session_state.get('logged_in'):
-    st.error("Please log in first")
-    st.stop()
-
-# AI Assistant class for OpenAI 0.28.1
-class AIAssistant:
-    def __init__(self):
-        self.api_key = st.secrets.get("OPENAI_API_KEY", "") if hasattr(st, 'secrets') else ""
-    
-    def get_response(self, prompt, context=""):
-        """Get AI response using OpenAI 0.28.1"""
-        if not self.api_key:
-            return "API key not configured"
-        
-        try:
-            import openai
-            
-            openai.api_key = self.api_key
-            
-            response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant."},
-                    {"role": "user", "content": f"{context}\n\n{prompt}"}
-                ],
-                max_tokens=300,
-                temperature=0.7
-            )
-            
-            return response.choices[0].message.content
-        except Exception as e:
-            return f"AI Error: {str(e)}"
 
 def main():
-    """Main dashboard function."""
+    """Main dashboard function - NO set_page_config here!"""
     
-    # Header
-    st.title(f"📊 Welcome, {st.session_state.username}!")
-    st.markdown(f"**Role:** {st.session_state.get('user_role', 'User')}")
+    # Title
+    st.title("📊 Intelligence Dashboard")
     
-    # Initialize AI
-    ai = AIAssistant()
+    # Welcome message
+    st.success(f"Welcome, {st.session_state.get('username', 'User')}!")
     
-    # Domain selection
-    domain = st.sidebar.selectbox(
-        "Select Domain",
-        ["Cybersecurity", "Data Science", "IT Operations", "AI Assistant"]
-    )
+    # Create tabs
+    tab1, tab2, tab3 = st.tabs(["Security", "Analytics", "Operations"])
     
-    # Logout button
-    if st.sidebar.button("Logout"):
-        st.session_state.logged_in = False
-        st.session_state.username = None
-        st.session_state.user_role = None
-        st.rerun()
-    
-    # Domain content
-    if domain == "Cybersecurity":
-        show_cybersecurity()
-    elif domain == "Data Science":
-        show_data_science()
-    elif domain == "IT Operations":
-        show_it_operations()
-    elif domain == "AI Assistant":
-        show_ai_assistant(ai)
-
-def show_cybersecurity():
-    """Cybersecurity dashboard."""
-    st.header("🔒 Cybersecurity Dashboard")
-    
-    # Sample data
-    data = pd.DataFrame({
-        'Severity': ['Critical', 'High', 'Medium', 'Low'],
-        'Count': [5, 12, 23, 45],
-        'Status': ['Open', 'Open', 'In Progress', 'Resolved']
-    })
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.metric("Total Incidents", 85)
-        st.metric("Open Incidents", 17)
+    with tab1:
+        st.header("🔒 Security Dashboard")
         
-    with col2:
-        st.metric("Critical", 5)
-        st.metric("Avg Resolution", "24h")
+        # Security metrics
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Active Threats", "12", "+2")
+        with col2:
+            st.metric("Incidents", "3", "0")
+        with col3:
+            st.metric("Prevented", "89", "+15")
+        
+        # Security log
+        st.subheader("Recent Security Events")
+        security_data = [
+            {"Time": "10:30", "Event": "Failed login attempt", "Severity": "Medium", "Status": "Resolved"},
+            {"Time": "11:15", "Event": "Port scan detected", "Severity": "High", "Status": "Investigating"},
+            {"Time": "12:45", "Event": "Firewall rule updated", "Severity": "Low", "Status": "Completed"},
+            {"Time": "14:20", "Event": "Malware scan completed", "Severity": "Low", "Status": "Clean"},
+        ]
+        st.table(security_data)
     
-    # Charts
-    fig1 = px.pie(data, values='Count', names='Severity', title="Incidents by Severity")
-    st.plotly_chart(fig1, use_container_width=True)
-
-def show_data_science():
-    """Data Science dashboard."""
-    st.header("📊 Data Science Dashboard")
+    with tab2:
+        st.header("📈 Analytics Dashboard")
+        
+        # Data metrics
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Data Volume", "2.4 TB", "+0.3 TB")
+        with col2:
+            st.metric("Processing Jobs", "156", "+24")
+        with col3:
+            st.metric("Accuracy", "94.2%", "+1.8%")
+        
+        # Sample data
+        st.subheader("Performance Metrics")
+        import pandas as pd
+        import numpy as np
+        
+        # Generate sample data
+        dates = pd.date_range('2024-01-01', periods=30, freq='D')
+        data = pd.DataFrame({
+            'Date': dates,
+            'Throughput': np.random.randint(100, 1000, 30),
+            'Latency': np.random.randint(10, 100, 30),
+            'Errors': np.random.randint(0, 10, 30)
+        })
+        
+        st.line_chart(data.set_index('Date')[['Throughput', 'Latency']])
+        
+        st.subheader("Data Summary")
+        st.dataframe(data.describe())
     
-    # Sample data
-    data = pd.DataFrame({
-        'Department': ['Sales', 'Marketing', 'IT', 'Finance', 'HR'],
-        'Datasets': [45, 32, 67, 28, 15],
-        'Quality': [0.85, 0.92, 0.78, 0.95, 0.88]
-    })
+    with tab3:
+        st.header("🖥️ Operations Dashboard")
+        
+        # System metrics
+        st.subheader("System Health")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.progress(0.75, text="CPU Usage: 75%")
+            st.progress(0.88, text="Memory: 88%")
+        with col2:
+            st.progress(0.45, text="Disk: 45%")
+            st.progress(0.95, text="Network: 95%")
+        
+        # Service status
+        st.subheader("Service Status")
+        
+        services = [
+            {"Service": "Web Server", "Status": "✅ Running", "Uptime": "99.9%"},
+            {"Service": "Database", "Status": "✅ Running", "Uptime": "99.8%"},
+            {"Service": "API Gateway", "Status": "⚠️ Slow", "Uptime": "98.5%"},
+            {"Service": "Cache", "Status": "✅ Running", "Uptime": "99.7%"},
+            {"Service": "Monitoring", "Status": "✅ Running", "Uptime": "100%"},
+        ]
+        
+        for service in services:
+            col1, col2, col3 = st.columns([2, 1, 1])
+            with col1:
+                st.write(f"**{service['Service']}**")
+            with col2:
+                st.write(service['Status'])
+            with col3:
+                st.write(service['Uptime'])
     
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.metric("Total Datasets", 187)
-    with col2:
-        st.metric("Avg Quality", "0.88")
-    with col3:
-        st.metric("Storage Used", "4.2 GB")
-    
-    # Charts
-    fig1 = px.bar(data, x='Department', y='Datasets', title="Datasets by Department")
-    st.plotly_chart(fig1, use_container_width=True)
-
-def show_it_operations():
-    """IT Operations dashboard."""
-    st.header("🖥️ IT Operations Dashboard")
-    
-    # Sample data
-    data = pd.DataFrame({
-        'Priority': ['Urgent', 'High', 'Medium', 'Low'],
-        'Count': [8, 15, 42, 30],
-        'Status': ['Open', 'In Progress', 'Resolved', 'Closed']
-    })
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.metric("Open Tickets", 23)
-    with col2:
-        st.metric("Urgent", 8)
-    with col3:
-        st.metric("Avg Response", "2.5h")
-    
-    # Charts
-    fig1 = px.bar(data, x='Priority', y='Count', color='Priority', title="Tickets by Priority")
-    st.plotly_chart(fig1, use_container_width=True)
-
-def show_ai_assistant(ai):
-    """AI Assistant interface."""
-    st.header("🤖 AI Assistant")
-    
-    st.info("Ask questions about your data or get insights")
-    
-    question = st.text_area("Your question:", height=100)
-    
-    if st.button("Get AI Analysis"):
-        if question:
-            with st.spinner("Thinking..."):
-                response = ai.get_response(question)
-                st.markdown("### AI Response:")
-                st.write(response)
-        else:
-            st.warning("Please enter a question")
+    # Footer
+    st.markdown("---")
+    st.caption("Last updated: Just now | Auto-refresh every 5 minutes")
 
 if __name__ == "__main__":
     main()
