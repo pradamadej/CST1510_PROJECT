@@ -57,6 +57,20 @@ class DatabaseManager:
             print(f"Failed query: {query}")
             self.connection.rollback()  # Rollback on error
             return None
+        
+    def get_user_by_username(self, username: str) -> Optional[Tuple]:
+    """
+    Retrieve a user by their username.
+    
+    Args:
+        username (str): The username to search for
+        
+    Returns:
+        Optional[Tuple]: The user record if found, None otherwise
+    """
+    query = "SELECT * FROM users WHERE username = ?"
+    result = self.execute_query(query, (username,))
+    return result[0] if result else None    
     
     def create_tables(self) -> None:
         """Create all necessary tables for the platform if they don't exist."""
