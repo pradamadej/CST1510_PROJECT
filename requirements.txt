@@ -1,7 +1,7 @@
---only-binary :all:  # This forces binary wheels, no compilation needed
+# MINIMAL requirements.txt
 streamlit==1.28.0
 pandas==2.1.4
 plotly==5.17.0
 bcrypt==4.0.1
 openai==1.3.0
-numpy==1.26.0
+# NO NUMPY LINE - let pandas pull it automatically
