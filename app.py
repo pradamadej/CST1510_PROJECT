@@ -1,17 +1,15 @@
 """
-Main Entry Point - Multi-Domain Intelligence Platform
+Multi-Domain Intelligence Platform - Error Safe Version
 """
 
 import streamlit as st
 import os
-import sys
 
 # Set page config - MUST BE FIRST
 st.set_page_config(
     page_title="Intelligence Platform",
     page_icon="🏢",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
 # Initialize session state
@@ -19,444 +17,468 @@ if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 if 'username' not in st.session_state:
     st.session_state.username = None
-if 'user_role' not in st.session_state:
-    st.session_state.user_role = None
 if 'openai_client' not in st.session_state:
     st.session_state.openai_client = None
-if 'openai_available' not in st.session_state:
-    st.session_state.openai_available = False
-if 'openai_error' not in st.session_state:
-    st.session_state.openai_error = None
+if 'openai_status' not in st.session_state:
+    st.session_state.openai_status = "not_configured"
 if 'current_page' not in st.session_state:
     st.session_state.current_page = "login"
+if 'plotly_available' not in st.session_state:
+    st.session_state.plotly_available = False
 
-def initialize_openai():
-    """Initialize OpenAI client with API key from secrets."""
+def setup_openai():
+    """Simple OpenAI setup without proxies parameter"""
     try:
-        # Get API key from Streamlit secrets or environment
+        # Get API key
         api_key = None
         
-        # Try Streamlit secrets first
+        # Check Streamlit secrets
         try:
             if hasattr(st, 'secrets') and 'OPENAI_API_KEY' in st.secrets:
                 api_key = st.secrets['OPENAI_API_KEY']
+                st.session_state.openai_status = "found_in_secrets"
         except:
             pass
         
-        # Try environment variable
+        # Check environment
         if not api_key:
-            api_key = os.getenv('OPENAI_API_KEY')
+            api_key = os.environ.get('OPENAI_API_KEY')
+            if api_key:
+                st.session_state.openai_status = "found_in_env"
         
-        if not api_key or api_key == "":
-            st.session_state.openai_available = False
-            st.session_state.openai_error = "API key not found"
+        # No key found
+        if not api_key:
+            st.session_state.openai_status = "no_key"
             return None
         
-        # Import OpenAI here to avoid issues
-        from openai import OpenAI
+        # Clean key
+        api_key = api_key.strip()
         
-        # Simple initialization
-        client = OpenAI(api_key=api_key)
-        
-        # Test the connection with a simple call
+        # Import and create client
         try:
-            test_response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[{"role": "user", "content": "Say 'ok'"}],
-                max_tokens=5
-            )
-            st.session_state.openai_available = True
-            st.session_state.openai_error = None
-            return client
-        except Exception as test_error:
-            st.session_state.openai_available = False
-            st.session_state.openai_error = f"API test failed: {str(test_error)}"
+            import openai
+            
+            # VERSION CHECK
+            openai_version = openai.__version__
+            
+            if openai_version.startswith('1.'):
+                client = openai.OpenAI(api_key=api_key)
+                st.session_state.openai_status = f"connected_v{openai_version}"
+                return client
+            else:
+                openai.api_key = api_key
+                st.session_state.openai_status = f"connected_v{openai_version}_legacy"
+                return openai
+                
+        except ImportError:
+            st.session_state.openai_status = "not_installed"
             return None
             
-    except ImportError:
-        st.session_state.openai_available = False
-        st.session_state.openai_error = "OpenAI package not installed"
-        return None
     except Exception as e:
-        st.session_state.openai_available = False
-        st.session_state.openai_error = str(e)
+        st.session_state.openai_status = f"error: {str(e)}"
         return None
 
+def check_plotly():
+    """Check if plotly is available"""
+    try:
+        import plotly.express as px
+        import plotly.graph_objects as go
+        st.session_state.plotly_available = True
+        return True
+    except ImportError:
+        st.session_state.plotly_available = False
+        return False
+
+def test_openai():
+    """Test OpenAI connection"""
+    client = setup_openai()
+    
+    if not client:
+        return False, "No client"
+    
+    try:
+        if hasattr(client, 'chat'):
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": "Say 'OK'"}],
+                max_tokens=10
+            )
+            return True, response.choices[0].message.content
+        else:
+            import openai
+            response = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": "Say 'OK'"}],
+                max_tokens=10
+            )
+            return True, response.choices[0].message.content
+            
+    except Exception as e:
+        return False, str(e)
+
 def main():
-    """Main application logic."""
+    """Main app"""
     
-    # Initialize OpenAI on first run
-    if st.session_state.openai_client is None:
-        st.session_state.openai_client = initialize_openai()
+    # Check plotly on startup
+    if not st.session_state.plotly_available:
+        check_plotly()
     
-    # Sidebar - Always visible
+    # Sidebar
     with st.sidebar:
         st.markdown("## 🔍 Navigation")
         
         if st.session_state.logged_in:
             st.success(f"Welcome, {st.session_state.username}!")
             
-            # OpenAI status
-            if st.session_state.openai_available:
-                st.success("✅ OpenAI Connected")
-                if st.button("🔄 Test OpenAI"):
-                    test_openai_connection()
-            else:
-                st.warning("⚠️ OpenAI Not Available")
-                if st.session_state.openai_error:
-                    with st.expander("Error Details"):
-                        st.error(st.session_state.openai_error)
-                if st.button("🔄 Retry OpenAI Setup"):
-                    st.session_state.openai_client = initialize_openai()
-                    st.rerun()
-            
-            # Navigation buttons
-            st.markdown("---")
-            st.markdown("### Pages")
-            
+            # Status indicators
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("🏠 Home"):
-                    st.session_state.current_page = "home"
-                    st.rerun()
+                if st.session_state.openai_status.startswith("connected"):
+                    st.success("🤖 AI")
+                else:
+                    st.error("🤖 AI")
             with col2:
-                if st.button("🚪 Logout"):
-                    for key in list(st.session_state.keys()):
-                        del st.session_state[key]
+                if st.session_state.plotly_available:
+                    st.success("📊 Charts")
+                else:
+                    st.error("📊 Charts")
+            
+            # Navigation
+            st.markdown("---")
+            pages = [
+                ("🏠 Home", "home"),
+                ("🤖 AI Chat", "chat"),
+                ("📊 Dashboard", "dashboard"),
+                ("⚙️ Settings", "settings")
+            ]
+            
+            for page_name, page_id in pages:
+                if st.button(page_name, key=f"nav_{page_id}"):
+                    st.session_state.current_page = page_id
                     st.rerun()
-                    
-            if st.session_state.openai_available:
-                st.markdown("### AI Tools")
-                if st.button("🤖 AI Assistant"):
-                    st.session_state.current_page = "ai_assistant"
-                    st.rerun()
-                if st.button("🔒 Security Analysis"):
-                    st.session_state.current_page = "security_ai"
-                    st.rerun()
-                if st.button("📊 Data Insights"):
-                    st.session_state.current_page = "data_ai"
-                    st.rerun()
+                
+            st.markdown("---")
+            if st.button("🚪 Logout"):
+                for key in list(st.session_state.keys()):
+                    del st.session_state[key]
+                st.rerun()
+                
         else:
-            st.info("Please log in to access the platform")
-        
-        st.markdown("---")
-        st.markdown("### Demo Credentials")
-        st.code("john_analyst / password123")
+            st.info("Please login")
+            st.markdown("---")
+            st.markdown("**Demo Credentials:**")
+            st.code("john_analyst / password123")
     
-    # Main content area
-    st.title("🏢 Multi-Domain Intelligence Platform")
+    # Main content
+    st.title("🏢 Intelligence Platform")
     
-    # Route to correct page
     if not st.session_state.logged_in:
-        show_login_page()
+        show_login()
     else:
         if st.session_state.current_page == "home":
-            show_home_page()
-        elif st.session_state.current_page == "ai_assistant":
-            show_ai_assistant()
-        elif st.session_state.current_page == "security_ai":
-            show_security_ai()
-        elif st.session_state.current_page == "data_ai":
-            show_data_ai()
+            show_home()
+        elif st.session_state.current_page == "chat":
+            show_chat()
+        elif st.session_state.current_page == "dashboard":
+            show_dashboard_safe()
+        elif st.session_state.current_page == "settings":
+            show_settings()
         else:
-            show_home_page()
+            show_home()
 
-def test_openai_connection():
-    """Test OpenAI connection."""
-    if st.session_state.openai_client:
-        try:
-            with st.spinner("Testing connection..."):
-                response = st.session_state.openai_client.chat.completions.create(
-                    model="gpt-3.5-turbo",
-                    messages=[{"role": "user", "content": "Say 'Connected successfully'"}],
-                    max_tokens=10
-                )
-                st.success(f"✅ {response.choices[0].message.content}")
-        except Exception as e:
-            st.error(f"❌ Connection failed: {str(e)}")
+def show_login():
+    """Login page"""
+    st.subheader("🔐 Login")
+    
+    with st.form("login"):
+        user = st.text_input("Username", value="john_analyst")
+        pwd = st.text_input("Password", type="password", value="password123")
+        
+        if st.form_submit_button("Login"):
+            if user == "john_analyst" and pwd == "password123":
+                st.session_state.logged_in = True
+                st.session_state.username = user
+                st.session_state.current_page = "home"
+                st.rerun()
+            else:
+                st.error("Use: john_analyst / password123")
 
-def show_login_page():
-    """Show login page."""
-    st.subheader("🔐 Login to Access Platform")
+def show_home():
+    """Home page"""
+    st.success("✅ Dashboard")
     
-    col1, col2 = st.columns([1, 2])
-    
-    with col1:
-        st.image("https://cdn-icons-png.flaticon.com/512/2991/2991148.png", width=150)
-    
-    with col2:
-        with st.form("login_form"):
-            username = st.text_input("Username")
-            password = st.text_input("Password", type="password")
-            submit = st.form_submit_button("Login")
-            
-            if submit:
-                demo_users = {
-                    'john_analyst': 'password123',
-                    'sara_scientist': 'password123', 
-                    'mike_admin': 'password123',
-                    'Joel_analyst': 'password123',
-                    'Sara_scientist': 'password123',
-                    'Daniel_admin': 'password123'
-                }
-                
-                if username in demo_users and password == demo_users[username]:
-                    st.session_state.logged_in = True
-                    st.session_state.username = username
-                    st.session_state.user_role = "demo_user"
-                    st.session_state.current_page = "home"
-                    st.success(f"Welcome, {username}!")
-                    st.rerun()
-                else:
-                    st.error("Invalid credentials. Try: john_analyst / password123")
-
-def show_home_page():
-    """Show home dashboard."""
-    st.success(f"✅ Welcome back, {st.session_state.username}!")
-    
-    # Quick stats
+    # Stats
     col1, col2, col3 = st.columns(3)
-    
     with col1:
-        st.metric("Security Alerts", "12", "3 new")
+        st.metric("Alerts", "12")
     with col2:
-        st.metric("Data Processes", "156", "8%")
+        st.metric("Processes", "156")
     with col3:
-        st.metric("System Health", "98%", "-2%")
+        st.metric("Health", "98%")
     
-    # Domain tabs
     st.markdown("---")
-    tab1, tab2, tab3 = st.tabs(["🔒 Cybersecurity", "📊 Data Science", "🖥️ IT Operations"])
     
-    with tab1:
-        st.subheader("Cybersecurity Overview")
-        st.write("Monitor security threats and incidents")
-        
-        if st.session_state.openai_available:
-            if st.button("🔍 Analyze Recent Threats", key="cyber_btn"):
-                st.session_state.current_page = "security_ai"
-                st.rerun()
-        else:
-            st.info("Enable OpenAI for AI-powered security analysis")
-        
-        # Sample data
-        st.dataframe({
-            "Threat": ["Malware", "Phishing", "DDoS", "Insider"],
-            "Severity": ["High", "Medium", "High", "Low"],
-            "Status": ["Active", "Contained", "Resolved", "Investigation"]
-        })
-    
-    with tab2:
-        st.subheader("Data Science Dashboard")
-        st.write("Analyze and visualize data patterns")
-        
-        if st.session_state.openai_available:
-            if st.button("📈 Generate Insights", key="data_btn"):
-                st.session_state.current_page = "data_ai"
-                st.rerun()
-        
-        # Sample chart
-        chart_data = {"Metric": ["Accuracy", "Precision", "Recall", "F1-Score"],
-                     "Value": [0.92, 0.89, 0.94, 0.91]}
-        st.bar_chart(chart_data, x="Metric", y="Value")
-    
-    with tab3:
-        st.subheader("IT Operations")
-        st.write("Monitor system performance and infrastructure")
-        
-        # System status
-        st.progress(85, text="System Load: 85%")
-        st.progress(92, text="Network Uptime: 92%")
-        st.progress(78, text="Storage Usage: 78%")
+    # Quick tests
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Test OpenAI"):
+            success, msg = test_openai()
+            if success:
+                st.success(f"✅ {msg}")
+            else:
+                st.error(f"❌ {msg}")
+    with col2:
+        if st.button("Check Plotly"):
+            if check_plotly():
+                st.success("✅ Plotly available")
+            else:
+                st.error("❌ Plotly not installed")
 
-def show_ai_assistant():
-    """Show AI Assistant page."""
+def show_chat():
+    """AI Chat page"""
     st.title("🤖 AI Assistant")
     
-    if not st.session_state.openai_available:
-        st.warning("OpenAI is not available. Please check your API key.")
-        return
+    if 'messages' not in st.session_state:
+        st.session_state.messages = []
     
-    # Chat interface
-    if 'ai_messages' not in st.session_state:
-        st.session_state.ai_messages = [
-            {"role": "assistant", "content": "Hello! I'm your AI assistant. How can I help you today?"}
-        ]
-    
-    # Display chat history
-    for msg in st.session_state.ai_messages:
+    # Display chat
+    for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.write(msg["content"])
     
     # Chat input
-    if prompt := st.chat_input("Type your message..."):
-        # Add user message
-        st.session_state.ai_messages.append({"role": "user", "content": prompt})
+    if prompt := st.chat_input("Type your message"):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        
         with st.chat_message("user"):
             st.write(prompt)
         
-        # Get AI response
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 try:
-                    response = st.session_state.openai_client.chat.completions.create(
-                        model="gpt-3.5-turbo",
-                        messages=[{"role": m["role"], "content": m["content"]} 
-                                 for m in st.session_state.ai_messages],
-                        max_tokens=500
-                    )
-                    ai_response = response.choices[0].message.content
+                    success, response = test_openai()
+                    
+                    if success:
+                        client = setup_openai()
+                        if client and hasattr(client, 'chat'):
+                            ai_response_obj = client.chat.completions.create(
+                                model="gpt-3.5-turbo",
+                                messages=[
+                                    {"role": "system", "content": "You are a helpful assistant."},
+                                    {"role": "user", "content": prompt}
+                                ],
+                                max_tokens=200
+                            )
+                            ai_response = ai_response_obj.choices[0].message.content
+                        else:
+                            ai_response = "Connected! How can I help?"
+                    else:
+                        ai_response = "OpenAI not available. Please check settings."
+                    
                     st.write(ai_response)
-                    st.session_state.ai_messages.append({"role": "assistant", "content": ai_response})
+                    st.session_state.messages.append({"role": "assistant", "content": ai_response})
+                    
                 except Exception as e:
-                    st.error(f"Error: {str(e)}")
+                    error_msg = f"Error: {str(e)}"
+                    st.write(error_msg)
+                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
     
-    # Clear chat button
     if st.button("Clear Chat"):
-        st.session_state.ai_messages = [
-            {"role": "assistant", "content": "Hello! I'm your AI assistant. How can I help you today?"}
-        ]
+        st.session_state.messages = []
         st.rerun()
 
-def show_security_ai():
-    """Show Security AI Analysis page."""
-    st.title("🔒 AI Security Analysis")
+def show_dashboard_safe():
+    """Safe dashboard that won't crash"""
+    st.title("📊 Dashboard")
     
-    if not st.session_state.openai_available:
-        st.warning("OpenAI is not available for security analysis.")
-        return
-    
-    st.write("Describe a security incident or concern for AI analysis:")
-    
-    # Input for security analysis
-    security_query = st.text_area("Security Issue Description:", 
-                                 placeholder="E.g., 'We detected unauthorized access attempts from IP 192.168.1.100...'",
-                                 height=150)
-    
-    analysis_type = st.selectbox("Analysis Type:", 
-                                ["Threat Assessment", "Incident Response", "Vulnerability Analysis", 
-                                 "Compliance Check", "General Security Advice"])
-    
-    if st.button("Analyze with AI") and security_query:
-        with st.spinner(f"Performing {analysis_type}..."):
-            try:
-                system_prompt = f"""You are a cybersecurity expert specializing in {analysis_type}. 
-                Analyze the security issue and provide:
-                1. Risk assessment (Low/Medium/High/Critical)
-                2. Immediate actions to take
-                3. Long-term prevention strategies
-                4. Relevant compliance considerations
-                
-                Be concise but thorough."""
-                
-                response = st.session_state.openai_client.chat.completions.create(
-                    model="gpt-3.5-turbo",
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": security_query}
-                    ],
-                    max_tokens=800
-                )
-                
-                analysis = response.choices[0].message.content
-                
-                # Display results
-                st.markdown("### 🔍 AI Security Analysis")
-                st.markdown("---")
-                st.write(analysis)
-                
-                # Export option
-                if st.button("📋 Copy Analysis to Clipboard"):
-                    st.code(analysis, language="markdown")
-                    st.success("Analysis copied to clipboard format!")
+    # Check if we should try to load external dashboard
+    if st.session_state.plotly_available:
+        try:
+            # Try to import and run the dashboard
+            import importlib.util
+            import sys
+            
+            # Check if dashboard module exists
+            dashboard_path = "pages/dashboard.py"
+            if os.path.exists(dashboard_path):
+                try:
+                    # Create a custom import
+                    spec = importlib.util.spec_from_file_location("dashboard", dashboard_path)
+                    dashboard_module = importlib.util.module_from_spec(spec)
+                    sys.modules["dashboard"] = dashboard_module
                     
-            except Exception as e:
-                st.error(f"Analysis failed: {str(e)}")
-    
-    # Example queries
-    with st.expander("💡 Example Security Queries"):
-        st.write("""
-        - "Multiple failed login attempts detected on admin account"
-        - "Suspicious network traffic from external IPs"
-        - "Employee reported phishing email asking for credentials"
-        - "Need to assess GDPR compliance for our data handling"
-        - "Planning incident response for ransomware attack"
-        """)
+                    # Read and execute the code with error handling
+                    with open(dashboard_path, 'r') as f:
+                        code = f.read()
+                    
+                    # Replace set_page_config calls to avoid errors
+                    code = code.replace('st.set_page_config', '# st.set_page_config')
+                    
+                    # Execute in a safe namespace
+                    exec_globals = {'st': st, 'plotly': None}
+                    exec(code, exec_globals)
+                    
+                    # Try to call main if it exists
+                    if 'main' in exec_globals:
+                        exec_globals['main']()
+                    else:
+                        st.info("Dashboard loaded but no main() function found")
+                        
+                except Exception as e:
+                    st.error(f"Error loading dashboard: {str(e)}")
+                    show_fallback_dashboard()
+            else:
+                st.info("No external dashboard found")
+                show_fallback_dashboard()
+                
+        except Exception as e:
+            st.error(f"Dashboard error: {str(e)}")
+            show_fallback_dashboard()
+    else:
+        st.warning("⚠️ Plotly not installed. Using simplified dashboard.")
+        show_fallback_dashboard()
 
-def show_data_ai():
-    """Show Data Science AI Insights page."""
-    st.title("📊 AI Data Insights")
+def show_fallback_dashboard():
+    """Fallback dashboard when plotly is not available"""
+    st.info("Using simplified dashboard view")
     
-    if not st.session_state.openai_available:
-        st.warning("OpenAI is not available for data analysis.")
-        return
+    # Tabs for different domains
+    tab1, tab2, tab3 = st.tabs(["🔒 Security", "📈 Analytics", "🖥️ Operations"])
     
-    st.write("Ask questions about your data or request analysis:")
-    
-    # Data analysis options
-    data_query = st.text_input("Your data question:", 
-                              placeholder="E.g., 'What trends should I look for in sales data?'")
-    
-    data_context = st.text_area("Provide context about your data (optional):",
-                               placeholder="E.g., 'I have monthly sales data for 2023 with columns: date, product, revenue, region'",
-                               height=100)
-    
-    analysis_goal = st.selectbox("Analysis Goal:",
-                                ["Trend Identification", "Anomaly Detection", "Predictive Insights",
-                                 "Pattern Recognition", "Optimization Suggestions", "Correlation Analysis"])
-    
-    if st.button("Generate Insights") and data_query:
-        with st.spinner("Analyzing data patterns..."):
-            try:
-                system_prompt = f"""You are a data science expert. The user wants {analysis_goal}.
-                Provide actionable insights including:
-                1. Key findings and patterns
-                2. Statistical recommendations
-                3. Visualization suggestions
-                4. Next steps for deeper analysis
-                
-                Context about the data: {data_context if data_context else 'No specific context provided'}"""
-                
-                response = st.session_state.openai_client.chat.completions.create(
-                    model="gpt-3.5-turbo",
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": data_query}
-                    ],
-                    max_tokens=700
-                )
-                
-                insights = response.choices[0].message.content
-                
-                # Display results
-                st.markdown("### 📈 AI Data Insights")
-                st.markdown("---")
-                st.write(insights)
-                
-                # Visual suggestions
-                st.markdown("#### 📊 Recommended Visualizations:")
-                viz_col1, viz_col2, viz_col3 = st.columns(3)
-                with viz_col1:
-                    st.metric("Line Chart", "Trends", "Recommended")
-                with viz_col2:
-                    st.metric("Heatmap", "Correlations", "Useful")
-                with viz_col3:
-                    st.metric("Scatter Plot", "Relationships", "Consider")
-                    
-            except Exception as e:
-                st.error(f"Insight generation failed: {str(e)}")
-    
-    # Quick analysis templates
-    with st.expander("🚀 Quick Analysis Templates"):
-        col1, col2 = st.columns(2)
+    with tab1:
+        st.subheader("Security Overview")
+        
+        # Security metrics
+        col1, col2, col3 = st.columns(3)
         with col1:
-            if st.button("Sales Trends"):
-                st.session_state.current_page = "ai_assistant"
-                st.rerun()
+            st.metric("Threats", "12", "+2")
         with col2:
-            if st.button("User Behavior"):
-                st.session_state.current_page = "ai_assistant"
+            st.metric("Incidents", "3", "0")
+        with col3:
+            st.metric("Blocked", "156", "+24")
+        
+        # Security log
+        st.markdown("### Recent Events")
+        events = [
+            {"Time": "10:30", "Event": "Failed login", "Severity": "Medium"},
+            {"Time": "11:15", "Event": "Port scan", "Severity": "High"},
+            {"Time": "12:45", "Event": "Policy update", "Severity": "Low"},
+        ]
+        st.table(events)
+    
+    with tab2:
+        st.subheader("Data Analytics")
+        
+        # Simple data display
+        import pandas as pd
+        import numpy as np
+        
+        # Generate sample data
+        dates = pd.date_range('2024-01-01', periods=30, freq='D')
+        data = pd.DataFrame({
+            'Date': dates,
+            'Sales': np.random.randint(100, 1000, 30),
+            'Users': np.random.randint(50, 500, 30),
+            'Engagement': np.random.rand(30) * 100
+        })
+        
+        st.dataframe(data)
+        
+        # Simple line chart using streamlit
+        st.line_chart(data.set_index('Date')[['Sales', 'Users']])
+    
+    with tab3:
+        st.subheader("IT Operations")
+        
+        # System metrics
+        st.progress(0.85, text="CPU Usage: 85%")
+        st.progress(0.92, text="Memory: 92%")
+        st.progress(0.64, text="Disk: 64%")
+        st.progress(0.99, text="Network: 99%")
+        
+        # System status
+        st.markdown("### Service Status")
+        services = {
+            "Web Server": "✅ Running",
+            "Database": "✅ Running", 
+            "API Gateway": "⚠️ Slow",
+            "Cache": "✅ Running",
+            "Monitoring": "✅ Running"
+        }
+        
+        for service, status in services.items():
+            st.write(f"- **{service}:** {status}")
+
+def show_settings():
+    """Settings page"""
+    st.title("⚙️ Settings")
+    
+    # OpenAI Configuration
+    st.markdown("### 🤖 OpenAI Configuration")
+    
+    # Current status
+    status_color = "🟢" if st.session_state.openai_status.startswith("connected") else "🔴"
+    st.info(f"**Status:** {status_color} {st.session_state.openai_status}")
+    
+    # API Key input
+    api_key = st.text_input("OpenAI API Key:", type="password", placeholder="sk-...")
+    
+    if st.button("Save & Test API Key"):
+        if api_key:
+            # Save temporarily
+            os.environ['OPENAI_API_KEY'] = api_key
+            st.session_state.openai_client = None
+            
+            # Test
+            success, msg = test_openai()
+            if success:
+                st.success(f"✅ {msg}")
                 st.rerun()
+            else:
+                st.error(f"❌ {msg}")
+        else:
+            st.warning("Please enter an API key")
+    
+    # Dependencies Status
+    st.markdown("---")
+    st.markdown("### 📦 Dependencies")
+    
+    deps = [
+        ("Streamlit", "streamlit", "1.36.0"),
+        ("OpenAI", "openai", "1.6.1"),
+        ("Plotly", "plotly", "5.18.0"),
+        ("Python-dotenv", "python-dotenv", "1.0.0"),
+    ]
+    
+    for dep_name, dep_module, expected_ver in deps:
+        try:
+            module = __import__(dep_module)
+            version = getattr(module, '__version__', 'Unknown')
+            status = "✅" if version == expected_ver else f"⚠️ {version}"
+            st.write(f"- **{dep_name}:** {status}")
+        except ImportError:
+            st.write(f"- **{dep_name}:** ❌ Not installed")
+    
+    # Instructions
+    st.markdown("---")
+    st.markdown("### 📝 Setup Instructions")
+    
+    st.markdown("""
+    1. **Add to Streamlit Secrets:**
+       ```toml
+       OPENAI_API_KEY = "sk-your-key-here"
+       ```
+    
+    2. **Required packages in requirements.txt:**
+       ```txt
+       streamlit==1.36.0
+       openai==1.6.1
+       python-dotenv==1.0.0
+       plotly==5.18.0
+       ```
+    
+    3. **Test connection** using the button above
+    """)
 
 if __name__ == "__main__":
     main()
