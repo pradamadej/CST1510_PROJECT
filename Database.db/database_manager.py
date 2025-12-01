@@ -55,26 +55,17 @@ class DatabaseManager:
         except sqlite3.Error as e:
             print(f"Database error: {e}")
             print(f"Failed query: {query}")
-            self.connection.rollback()  # Rollback on error
+            if self.connection:
+                self.connection.rollback()  # Rollback on error
             return None
-        
-    def get_user_by_username(self, username: str) -> Optional[Tuple]:
-    """
-    Retrieve a user by their username.
     
-    Args:
-        username (str): The username to search for
+    def create_tables(self) -> bool:
+        """
+        Create all necessary tables for the platform if they don't exist.
         
-    Returns:
-        Optional[Tuple]: The user record if found, None otherwise
-    """
-    query = "SELECT * FROM users WHERE username = ?"
-    result = self.execute_query(query, (username,))
-    return result[0] if result else None    
-    
-    def create_tables(self) -> None:
-        """Create all necessary tables for the platform if they don't exist."""
-        
+        Returns:
+            bool: True if tables created successfully, False otherwise
+        """
         # Users table for authentication
         users_table = """
         CREATE TABLE IF NOT EXISTS users (
@@ -144,12 +135,34 @@ class DatabaseManager:
             it_tickets_table
         ]
         
+        success = True
         for table_query in tables:
             result = self.execute_query(table_query)
             if result is None:  # Check if query executed successfully
                 continue
+            else:
+                success = False
         
-        print("All tables created successfully!")
+        if success:
+            print("All tables created successfully!")
+        else:
+            print("Some tables may already exist.")
+        
+        return success
+    
+    def get_user_by_username(self, username: str) -> Optional[Tuple]:
+        """
+        Retrieve a user by their username.
+        
+        Args:
+            username (str): The username to search for
+            
+        Returns:
+            Optional[Tuple]: The user record if found, None otherwise
+        """
+        query = "SELECT * FROM users WHERE username = ?"
+        result = self.execute_query(query, (username,))
+        return result[0] if result else None
     
     def migrate_users_from_file(self, file_path: str = "users.txt") -> bool:
         """
@@ -174,10 +187,7 @@ class DatabaseManager:
                         username, password_hash, role = parts[0], parts[1], parts[2]
                         
                         # Check if user already exists
-                        existing_user = self.execute_query(
-                            "SELECT id FROM users WHERE username = ?", 
-                            (username,)
-                        )
+                        existing_user = self.get_user_by_username(username)
                         
                         if not existing_user:
                             self.execute_query(
@@ -213,12 +223,15 @@ class DatabaseManager:
             
             # Load data into SQLite table
             df.to_sql(table_name, self.connection, if_exists='append', index=False)
+            self.connection.commit()
             
             print(f"Successfully loaded data from {csv_file_path} into {table_name} table.")
             return True
             
         except Exception as e:
             print(f"Error loading CSV data: {e}")
+            if self.connection:
+                self.connection.rollback()
             return False
     
     def get_all_records(self, table_name: str) -> List[Tuple]:
@@ -231,7 +244,6 @@ class DatabaseManager:
         Returns:
             List[Tuple]: All records from the table
         """
-        # Use parameterized query to prevent SQL injection
         query = f"SELECT * FROM {table_name}"
         return self.execute_query(query) or []
     
@@ -335,6 +347,104 @@ class DatabaseManager:
         base_query += " ORDER BY date_reported DESC"
         return self.execute_query(base_query, tuple(params)) or []
     
+    def get_datasets(self, filters: Dict = None) -> List[Tuple]:
+        """
+        Retrieve datasets with optional filtering.
+        
+        Args:
+            filters (dict): Optional filters like {'source_department': 'Sales', 'is_archived': 0}
+            
+        Returns:
+            List[Tuple]: Dataset records
+        """
+        base_query = "SELECT * FROM datasets_metadata"
+        params = []
+        
+        if filters:
+            where_clauses = []
+            for key, value in filters.items():
+                where_clauses.append(f"{key} = ?")
+                params.append(value)
+            
+            if where_clauses:
+                base_query += " WHERE " + " AND ".join(where_clauses)
+        
+        base_query += " ORDER BY upload_date DESC"
+        return self.execute_query(base_query, tuple(params)) or []
+    
+    def get_it_tickets(self, filters: Dict = None) -> List[Tuple]:
+        """
+        Retrieve IT tickets with optional filtering.
+        
+        Args:
+            filters (dict): Optional filters like {'status': 'Open', 'priority': 'High'}
+            
+        Returns:
+            List[Tuple]: IT ticket records
+        """
+        base_query = "SELECT * FROM it_tickets"
+        params = []
+        
+        if filters:
+            where_clauses = []
+            for key, value in filters.items():
+                where_clauses.append(f"{key} = ?")
+                params.append(value)
+            
+            if where_clauses:
+                base_query += " WHERE " + " AND ".join(where_clauses)
+        
+        base_query += " ORDER BY date_created DESC"
+        return self.execute_query(base_query, tuple(params)) or []
+    
+    def create_demo_users(self) -> int:
+        """
+        Create demo users for testing if they don't exist.
+        
+        Returns:
+            int: Number of demo users created
+        """
+        import bcrypt
+        
+        demo_users = [
+            ('john_analyst', 'password123', 'cyber_analyst'),
+            ('sara_scientist', 'password123', 'data_scientist'),
+            ('mike_admin', 'password123', 'it_administrator'),
+            ('Joel_analyst', 'password123', 'cyber_analyst'),
+            ('Sara_scientist', 'password123', 'data_scientist'),
+            ('Daniel_admin', 'password123', 'it_administrator')
+        ]
+        
+        created_count = 0
+        for username, password, role in demo_users:
+            # Check if user already exists
+            existing_user = self.get_user_by_username(username)
+            
+            if not existing_user:
+                try:
+                    # Hash password
+                    hashed_pw = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                    
+                    # Insert user
+                    self.execute_query(
+                        "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+                        (username, hashed_pw, role)
+                    )
+                    created_count += 1
+                    print(f"Created demo user: {username}")
+                    
+                except Exception as e:
+                    # If bcrypt fails, use pre-hashed password for 'password123'
+                    pre_hashed = '$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW'
+                    self.execute_query(
+                        "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+                        (username, pre_hashed, role)
+                    )
+                    created_count += 1
+                    print(f"Created demo user with pre-hashed password: {username}")
+        
+        return created_count
+    
     def close(self) -> None:
         """Close the database connection."""
         if self.connection:
@@ -357,6 +467,10 @@ if __name__ == "__main__":
     
     # Create all tables
     db.create_tables()
+    
+    # Create demo users
+    demo_users_created = db.create_demo_users()
+    print(f"Created {demo_users_created} demo users")
     
     # Example: Migrate users from text file (run this after Week 7)
     # db.migrate_users_from_file("users.txt")
@@ -396,10 +510,18 @@ if __name__ == "__main__":
         if db.delete_record('cyber_incidents', incident_id):
             print("✓ Test incident deleted successfully")
     
-    # Test filtered query
-    print("\n--- Testing Filtered Query ---")
+    # Test filtered queries
+    print("\n--- Testing Filtered Queries ---")
     filtered_incidents = db.get_cyber_incidents({'status': 'Open'})
     print(f"✓ Retrieved {len(filtered_incidents)} incidents with status 'Open'")
+    
+    # Test get_user_by_username
+    print("\n--- Testing User Retrieval ---")
+    test_user = db.get_user_by_username('john_analyst')
+    if test_user:
+        print(f"✓ Found user: {test_user[1]} (Role: {test_user[3]})")
+    else:
+        print("✗ User not found")
     
     # Close connection
     db.close()
