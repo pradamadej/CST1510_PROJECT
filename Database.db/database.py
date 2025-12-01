@@ -1,6 +1,6 @@
 import sqlite3
 import pandas as pd
-from typing import List, Tuple, Optional, Any
+from typing import List, Tuple, Optional, Any, Dict
 
 class DatabaseManager:
     """
@@ -28,6 +28,7 @@ class DatabaseManager:
             print(f"Successfully connected to database: {self.db_name}")
         except sqlite3.Error as e:
             print(f"Error connecting to database: {e}")
+            raise  # Re-raise the exception to handle it at higher level
     
     def execute_query(self, query: str, params: Tuple = ()) -> Optional[List[Tuple]]:
         """
@@ -54,6 +55,7 @@ class DatabaseManager:
         except sqlite3.Error as e:
             print(f"Database error: {e}")
             print(f"Failed query: {query}")
+            self.connection.rollback()  # Rollback on error
             return None
     
     def create_tables(self) -> None:
@@ -129,7 +131,9 @@ class DatabaseManager:
         ]
         
         for table_query in tables:
-            self.execute_query(table_query)
+            result = self.execute_query(table_query)
+            if result is None:  # Check if query executed successfully
+                continue
         
         print("All tables created successfully!")
     
@@ -213,6 +217,7 @@ class DatabaseManager:
         Returns:
             List[Tuple]: All records from the table
         """
+        # Use parameterized query to prevent SQL injection
         query = f"SELECT * FROM {table_name}"
         return self.execute_query(query) or []
     
@@ -248,6 +253,10 @@ class DatabaseManager:
         Returns:
             bool: True if update successful, False otherwise
         """
+        if not data:
+            print("No data provided for update")
+            return False
+            
         set_clause = ', '.join([f"{key} = ?" for key in data.keys()])
         values = tuple(data.values()) + (record_id,)
         
@@ -287,6 +296,31 @@ class DatabaseManager:
         result = self.execute_query(query, (record_id,))
         return result[0] if result else None
     
+    def get_cyber_incidents(self, filters: Dict = None) -> List[Tuple]:
+        """
+        Retrieve cyber incidents with optional filtering.
+        
+        Args:
+            filters (dict): Optional filters like {'status': 'Open', 'severity': 'High'}
+            
+        Returns:
+            List[Tuple]: Cyber incident records
+        """
+        base_query = "SELECT * FROM cyber_incidents"
+        params = []
+        
+        if filters:
+            where_clauses = []
+            for key, value in filters.items():
+                where_clauses.append(f"{key} = ?")
+                params.append(value)
+            
+            if where_clauses:
+                base_query += " WHERE " + " AND ".join(where_clauses)
+        
+        base_query += " ORDER BY date_reported DESC"
+        return self.execute_query(base_query, tuple(params)) or []
+    
     def close(self) -> None:
         """Close the database connection."""
         if self.connection:
@@ -301,30 +335,6 @@ class DatabaseManager:
         """Support context manager protocol."""
         self.close()
 
-        def get_cyber_incidents(self, filters: dict = None) -> List[Tuple]:
-    """
-    Retrieve cyber incidents with optional filtering.
-    
-    Args:
-        filters (dict): Optional filters like {'status': 'Open', 'severity': 'High'}
-        
-    Returns:
-        List[Tuple]: Cyber incident records
-    """
-    base_query = "SELECT * FROM cyber_incidents"
-    params = []
-    
-    if filters:
-        where_clauses = []
-        for key, value in filters.items():
-            where_clauses.append(f"{key} = ?")
-            params.append(value)
-        
-        if where_clauses:
-            base_query += " WHERE " + " AND ".join(where_clauses)
-    
-    base_query += " ORDER BY date_reported DESC"
-    return self.execute_query(base_query, tuple(params)) or []
 
 # Example usage and testing
 if __name__ == "__main__":
@@ -368,8 +378,14 @@ if __name__ == "__main__":
             print("✓ Incident updated successfully")
     
     # Delete the test incident
-    if db.delete_record('cyber_incidents', incident_id):
-        print("✓ Test incident deleted successfully")
+    if incidents:  # Only delete if we have incidents
+        if db.delete_record('cyber_incidents', incident_id):
+            print("✓ Test incident deleted successfully")
+    
+    # Test filtered query
+    print("\n--- Testing Filtered Query ---")
+    filtered_incidents = db.get_cyber_incidents({'status': 'Open'})
+    print(f"✓ Retrieved {len(filtered_incidents)} incidents with status 'Open'")
     
     # Close connection
     db.close()
