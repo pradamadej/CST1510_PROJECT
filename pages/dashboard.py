@@ -12,37 +12,62 @@ import os
 from datetime import datetime, timedelta
 import json
 
+# Add project root to path for imports
 proj_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-db_folder = os.path.join(proj_root, "Database.db")
-if db_folder not in sys.path:
-    sys.path.insert(0, db_folder)
+sys.path.insert(0, proj_root)
 
-# Import DatabaseManager from the local `database.py` module inside Database.db
-from database import DatabaseManager
-import bcrypt
-
-from database_manager import DatabaseManager
+# Import DatabaseManager
+try:
+    # Try importing from the correct location
+    from database_manager import DatabaseManager
+except ImportError:
+    # If database_manager.py is not in project root, try different approach
+    st.error("DatabaseManager not found. Please ensure database_manager.py is in the project root.")
+    # Create a minimal DatabaseManager class as fallback
+    class DatabaseManager:
+        def __init__(self, db_name="intelligence_platform.db"):
+            self.db_name = db_name
+            st.warning(f"Using fallback DatabaseManager with {db_name}")
+        
+        def execute_query(self, query, params=()):
+            return []
+        
+        def get_cyber_incidents(self, filters=None):
+            return []
+        
+        def get_all_records(self, table_name):
+            return []
+        
+        def close(self):
+            pass
 
 # AI Integration - OpenAI ChatGPT
 try:
     import openai
+    OPENAI_AVAILABLE = True
 except ImportError:
-    st.error("OpenAI package not installed. Run: pip install openai")
+    OPENAI_AVAILABLE = False
+    st.warning("OpenAI package not installed. AI features will be limited. Run: pip install openai")
 
 class AIAssistant:
     """AI Assistant class for ChatGPT integration."""
     
     def __init__(self):
         self.api_key = self._get_api_key()
+        self.available = OPENAI_AVAILABLE and self.api_key is not None
         
     def _get_api_key(self):
         """Get OpenAI API key from environment variables or Streamlit secrets."""
+        if not OPENAI_AVAILABLE:
+            return None
+            
         try:
             # Try Streamlit secrets first
             if hasattr(st, 'secrets') and 'OPENAI_API_KEY' in st.secrets:
                 return st.secrets['OPENAI_API_KEY']
             # Try environment variable
-            return os.getenv('OPENAI_API_KEY')
+            api_key = os.getenv('OPENAI_API_KEY')
+            return api_key
         except:
             return None
     
@@ -58,8 +83,11 @@ class AIAssistant:
         Returns:
             str: AI response or error message
         """
+        if not self.available:
+            return "🤖 AI Assistant is not available. Please install OpenAI package and configure API key."
+        
         if not self.api_key:
-            return "🔑 OpenAI API key not configured. Please set OPENAI_API_KEY environment variable."
+            return "🔑 OpenAI API key not configured. Please set OPENAI_API_KEY environment variable or add to Streamlit secrets."
         
         try:
             openai.api_key = self.api_key
@@ -123,18 +151,32 @@ def create_cybersecurity_dashboard(db, ai_assistant):
     st.header("🔒 Cybersecurity Dashboard")
     st.markdown("---")
     
-    # Get cyber incidents data
-    incidents = db.get_cyber_incidents()
+    # Get cyber incidents data - use get_all_records instead of get_cyber_incidents
+    incidents = db.get_all_records("cyber_incidents")
     
     if not incidents:
         st.warning("No cyber incidents data available.")
-        return
-    
-    # Convert to DataFrame
-    df = pd.DataFrame(incidents, columns=[
-        'ID', 'Title', 'Description', 'Severity', 'Status', 'Category', 
-        'Assigned_To', 'Date_Reported', 'Date_Resolved', 'Resolution_Time_Hours'
-    ])
+        # Create sample data for demonstration
+        sample_data = [
+            (1, 'Phishing Attack', 'Suspicious email campaign', 'High', 'Open', 'Phishing', 'Analyst_1', 
+             datetime.now() - timedelta(days=2), None, None),
+            (2, 'Malware Detection', 'Ransomware detected on server', 'Critical', 'In Progress', 'Malware',
+             'Analyst_2', datetime.now() - timedelta(days=1), None, None),
+            (3, 'Unauthorized Access', 'Failed login attempts', 'Medium', 'Resolved', 'Access Control',
+             'Analyst_1', datetime.now() - timedelta(days=5), datetime.now() - timedelta(days=4), 24.5),
+            (4, 'Data Leak', 'Sensitive data exposure', 'High', 'Open', 'Data Breach',
+             None, datetime.now() - timedelta(hours=12), None, None),
+        ]
+        df = pd.DataFrame(sample_data, columns=[
+            'ID', 'Title', 'Description', 'Severity', 'Status', 'Category', 
+            'Assigned_To', 'Date_Reported', 'Date_Resolved', 'Resolution_Time_Hours'
+        ])
+    else:
+        # Convert to DataFrame
+        df = pd.DataFrame(incidents, columns=[
+            'ID', 'Title', 'Description', 'Severity', 'Status', 'Category', 
+            'Assigned_To', 'Date_Reported', 'Date_Resolved', 'Resolution_Time_Hours'
+        ])
     
     # Metrics row
     col1, col2, col3, col4 = st.columns(4)
@@ -224,19 +266,34 @@ def create_data_science_dashboard(db, ai_assistant):
     st.header("📊 Data Science Dashboard")
     st.markdown("---")
     
-    # Get datasets data
-    datasets = db.get_datasets()
+    # Get datasets data - use get_all_records
+    datasets = db.get_all_records("datasets_metadata")
     
     if not datasets:
         st.warning("No datasets metadata available.")
-        return
-    
-    # Convert to DataFrame
-    df = pd.DataFrame(datasets, columns=[
-        'ID', 'Name', 'Description', 'Source_Department', 'File_Size_MB',
-        'Row_Count', 'Column_Count', 'Data_Quality_Score', 'Upload_Date',
-        'Last_Accessed', 'Is_Archived'
-    ])
+        # Create sample data for demonstration
+        sample_data = [
+            (1, 'Sales Data Q1', 'Quarterly sales figures', 'Sales', 125.5, 15000, 25, 0.85,
+             datetime.now() - timedelta(days=30), datetime.now() - timedelta(days=2), 0),
+            (2, 'Customer Feedback', 'Customer satisfaction survey results', 'Marketing', 45.2, 5000, 15, 0.92,
+             datetime.now() - timedelta(days=15), datetime.now() - timedelta(days=1), 0),
+            (3, 'Server Logs', 'Web server access logs', 'IT', 850.3, 250000, 8, 0.78,
+             datetime.now() - timedelta(days=90), datetime.now() - timedelta(days=30), 1),
+            (4, 'Financial Transactions', 'Bank transaction records', 'Finance', 320.7, 75000, 12, 0.95,
+             datetime.now() - timedelta(days=7), datetime.now(), 0),
+        ]
+        df = pd.DataFrame(sample_data, columns=[
+            'ID', 'Name', 'Description', 'Source_Department', 'File_Size_MB',
+            'Row_Count', 'Column_Count', 'Data_Quality_Score', 'Upload_Date',
+            'Last_Accessed', 'Is_Archived'
+        ])
+    else:
+        # Convert to DataFrame
+        df = pd.DataFrame(datasets, columns=[
+            'ID', 'Name', 'Description', 'Source_Department', 'File_Size_MB',
+            'Row_Count', 'Column_Count', 'Data_Quality_Score', 'Upload_Date',
+            'Last_Accessed', 'Is_Archived'
+        ])
     
     # Metrics row
     col1, col2, col3, col4 = st.columns(4)
@@ -331,19 +388,35 @@ def create_it_operations_dashboard(db, ai_assistant):
     st.header("🖥️ IT Operations Dashboard")
     st.markdown("---")
     
-    # Get IT tickets data
-    tickets = db.get_it_tickets()
+    # Get IT tickets data - use get_all_records
+    tickets = db.get_all_records("it_tickets")
     
     if not tickets:
         st.warning("No IT tickets data available.")
-        return
-    
-    # Convert to DataFrame
-    df = pd.DataFrame(tickets, columns=[
-        'ID', 'Title', 'Description', 'Assignee', 'Reporter', 'Status',
-        'Priority', 'Category', 'Date_Created', 'Date_Assigned', 
-        'Date_Resolved', 'Resolution_Notes'
-    ])
+        # Create sample data for demonstration
+        sample_data = [
+            (1, 'Printer not working', 'Printer in room 401 is offline', 'IT_Support_1', 'User_123', 'New',
+             'Medium', 'Hardware', datetime.now() - timedelta(hours=3), None, None, None),
+            (2, 'Email access issue', 'Cannot access email on mobile', 'IT_Support_2', 'User_456', 'In Progress',
+             'High', 'Software', datetime.now() - timedelta(days=1), datetime.now() - timedelta(hours=12), None, None),
+            (3, 'VPN connection problem', 'VPN disconnects frequently', 'IT_Support_1', 'User_789', 'Resolved',
+             'Urgent', 'Network', datetime.now() - timedelta(days=2), datetime.now() - timedelta(days=1), 
+             datetime.now() - timedelta(hours=6), 'Updated VPN client software'),
+            (4, 'Software license renewal', 'Adobe Creative Cloud license expiring', None, 'Admin_1', 'New',
+             'Low', 'License', datetime.now() - timedelta(hours=1), None, None, None),
+        ]
+        df = pd.DataFrame(sample_data, columns=[
+            'ID', 'Title', 'Description', 'Assignee', 'Reporter', 'Status',
+            'Priority', 'Category', 'Date_Created', 'Date_Assigned', 
+            'Date_Resolved', 'Resolution_Notes'
+        ])
+    else:
+        # Convert to DataFrame
+        df = pd.DataFrame(tickets, columns=[
+            'ID', 'Title', 'Description', 'Assignee', 'Reporter', 'Status',
+            'Priority', 'Category', 'Date_Created', 'Date_Assigned', 
+            'Date_Resolved', 'Resolution_Notes'
+        ])
     
     # Metrics row
     col1, col2, col3, col4 = st.columns(4)
@@ -473,7 +546,7 @@ def main():
     
     with col1:
         st.title("🏢 Multi-Domain Intelligence Platform")
-        st.markdown(f"Welcome back, **{st.session_state.username}**! | Role: **{st.session_state.user_role}**")
+        st.markdown(f"Welcome back, **{st.session_state.get('username', 'User')}**! | Role: **{st.session_state.get('user_role', 'User')}**")
     
     with col2:
         st.metric("Session Active", "✅ Online")
@@ -484,6 +557,7 @@ def main():
             for key in ['logged_in', 'username', 'user_role', 'user_id']:
                 if key in st.session_state:
                     del st.session_state[key]
+            st.rerun()
             st.switch_page("pages/1_Login.py")
     
     st.markdown("---")
@@ -503,36 +577,50 @@ def main():
     if domain_access['it_operations']:
         available_domains.append("🖥️ IT Operations")
     
-    selected_domain = st.sidebar.radio(
-        "Select Domain:",
-        available_domains,
-        index=0
-    )
+    if available_domains:
+        selected_domain = st.sidebar.radio(
+            "Select Domain:",
+            available_domains,
+            index=0
+        )
+    else:
+        st.sidebar.warning("No domains available for your role")
+        selected_domain = None
     
     # Quick metrics in sidebar
     st.sidebar.markdown("---")
     st.sidebar.header("📈 Quick Stats")
     
     try:
-        # Get quick stats for each domain
-        cyber_incidents = db.get_cyber_incidents()
-        datasets = db.get_datasets()
-        it_tickets = db.get_it_tickets()
+        # Get quick stats for each domain using get_all_records
+        cyber_incidents = db.get_all_records("cyber_incidents")
+        datasets = db.get_all_records("datasets_metadata")
+        it_tickets = db.get_all_records("it_tickets")
         
         if domain_access['cybersecurity'] and cyber_incidents:
-            open_cyber = len([inc for inc in cyber_incidents if inc[4] == 'Open'])  # Status index
-            st.sidebar.metric("Open Security Incidents", open_cyber)
+            # Convert to DataFrame to access status
+            if cyber_incidents:
+                df_cyber = pd.DataFrame(cyber_incidents, columns=['ID', 'Title', 'Description', 'Severity', 'Status', 'Category', 
+                    'Assigned_To', 'Date_Reported', 'Date_Resolved', 'Resolution_Time_Hours'])
+                open_cyber = len(df_cyber[df_cyber['Status'] == 'Open'])
+                st.sidebar.metric("Open Security Incidents", open_cyber)
         
         if domain_access['data_science'] and datasets:
-            total_size = sum(ds[4] for ds in datasets if ds[4] is not None) / 1024  # File size index
-            st.sidebar.metric("Total Data (GB)", f"{total_size:.1f}")
+            if datasets:
+                df_data = pd.DataFrame(datasets, columns=['ID', 'Name', 'Description', 'Source_Department', 'File_Size_MB',
+                    'Row_Count', 'Column_Count', 'Data_Quality_Score', 'Upload_Date', 'Last_Accessed', 'Is_Archived'])
+                total_size = df_data['File_Size_MB'].sum() / 1024
+                st.sidebar.metric("Total Data (GB)", f"{total_size:.1f}")
         
         if domain_access['it_operations'] and it_tickets:
-            open_tickets = len([t for t in it_tickets if t[5] in ['New', 'Assigned', 'In Progress']])  # Status index
-            st.sidebar.metric("Open IT Tickets", open_tickets)
+            if it_tickets:
+                df_it = pd.DataFrame(it_tickets, columns=['ID', 'Title', 'Description', 'Assignee', 'Reporter', 'Status',
+                    'Priority', 'Category', 'Date_Created', 'Date_Assigned', 'Date_Resolved', 'Resolution_Notes'])
+                open_tickets = len(df_it[df_it['Status'].isin(['New', 'Assigned', 'In Progress'])])
+                st.sidebar.metric("Open IT Tickets", open_tickets)
             
     except Exception as e:
-        st.sidebar.error("Error loading quick stats")
+        st.sidebar.warning("Could not load quick stats. Data may not be available yet.")
     
     # AI Assistant in sidebar
     st.sidebar.markdown("---")
@@ -554,12 +642,15 @@ def main():
             st.sidebar.warning("Please enter a question")
     
     # Display selected domain dashboard
-    if "Cybersecurity" in selected_domain and domain_access['cybersecurity']:
-        create_cybersecurity_dashboard(db, ai_assistant)
-    elif "Data Science" in selected_domain and domain_access['data_science']:
-        create_data_science_dashboard(db, ai_assistant)
-    elif "IT Operations" in selected_domain and domain_access['it_operations']:
-        create_it_operations_dashboard(db, ai_assistant)
+    if selected_domain:
+        if "Cybersecurity" in selected_domain and domain_access['cybersecurity']:
+            create_cybersecurity_dashboard(db, ai_assistant)
+        elif "Data Science" in selected_domain and domain_access['data_science']:
+            create_data_science_dashboard(db, ai_assistant)
+        elif "IT Operations" in selected_domain and domain_access['it_operations']:
+            create_it_operations_dashboard(db, ai_assistant)
+    else:
+        st.info("Please select a domain from the sidebar to view dashboard.")
     
     # Footer
     st.markdown("---")
