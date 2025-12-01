@@ -1,11 +1,10 @@
 [server]
-maxUploadSize = 2000
+maxUploadSize = 200
 enableXsrfProtection = true
-enableCORS = false
+enableCORS = true
 
 [browser]
 gatherUsageStats = false
-serverAddress = "localhost"
 
 [theme]
 primaryColor = "#1E88E5"
