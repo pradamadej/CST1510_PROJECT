@@ -24,60 +24,68 @@ import bcrypt
 from database_manager import DatabaseManager
 
 # AI Integration - OpenAI ChatGPT
-import streamlit as st
-from openai import OpenAI
+try:
+    import openai
+except ImportError:
+    st.error("OpenAI package not installed. Run: pip install openai")
 
-# initialise openai client
-client = OpenAI(api_key=st.secrets['OPENAI_API_KEY'])
-
-st.subheader('CatGPT - Open AI API')
-
-# Initialise session state
-if 'messages' not in st.session_state:
-    st.session_state.messages = []
-
-# Display existing messages
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-
-# User input
-prompt = st.chat_input("Say Something")
-
-if prompt:
-
-    # Display user message
-    with st.chat_message("user"):
-        st.markdown(prompt)
-
-    # Save user message
-    st.session_state.messages.append({
-        "role": "user",
-        "content": prompt
-    })
-
-    # Send to OpenAI
-    completion = client.chat.completions.create(
-        model="gpt-4o",
-        messages=st.session_state.messages,
-        temperature=1,
-        stream=True
-    )
-
-
-    # Display streaming assistant output
-    with st.chat_message("assistant"):
-        container = st.empty()
-        full_reply = ""
-
-        for chunk in completion:
-            delta = chunk.choices[0].delta
-            if delta.content:
-                full_reply += delta.content
-                container.markdown(full_reply)
-
-    # Save assistant message
-    st.session_state.messages.append({"role": "assistant", "content": full_reply})
+class AIAssistant:
+    """AI Assistant class for ChatGPT integration."""
+    
+    def __init__(self):
+        self.api_key = self._get_api_key()
+        
+    def _get_api_key(self):
+        """Get OpenAI API key from environment variables or Streamlit secrets."""
+        try:
+            # Try Streamlit secrets first
+            if hasattr(st, 'secrets') and 'OPENAI_API_KEY' in st.secrets:
+                return st.secrets['OPENAI_API_KEY']
+            # Try environment variable
+            return os.getenv('OPENAI_API_KEY')
+        except:
+            return None
+    
+    def get_ai_response(self, prompt, context="", max_tokens=500):
+        """
+        Get response from ChatGPT API.
+        
+        Args:
+            prompt (str): The user's question
+            context (str): Additional context for the AI
+            max_tokens (int): Maximum response length
+            
+        Returns:
+            str: AI response or error message
+        """
+        if not self.api_key:
+            return "🔑 OpenAI API key not configured. Please set OPENAI_API_KEY environment variable."
+        
+        try:
+            openai.api_key = self.api_key
+            
+            system_message = """
+            You are an expert assistant for a Multi-Domain Intelligence Platform. 
+            Provide helpful, professional responses about cybersecurity, data science, and IT operations.
+            Be concise but thorough in your analysis and recommendations.
+            """
+            
+            full_prompt = f"{context}\n\nUser Question: {prompt}"
+            
+            response = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": full_prompt}
+                ],
+                max_tokens=max_tokens,
+                temperature=0.7
+            )
+            
+            return response.choices[0].message.content
+            
+        except Exception as e:
+            return f"❌ AI Assistant Error: {str(e)}"
 
 def check_authentication():
     """Check if user is logged in, redirect to login if not."""
