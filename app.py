@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 """
 Multi-Domain Intelligence Platform - Main Application
 Secure, robust version with all fixes applied
@@ -682,10 +683,68 @@ def show_settings_page():
         placeholder="sk-...",
         help="Enter your OpenAI API key starting with 'sk-'"
     )
-    
+
     col1, col2 = st.columns(2)
     
     with col1:
+        if st.button("Test Connection", use_container_width=True):
+            if api_key:
+                # Temporarily set key
+                os.environ['OPENAI_API_KEY'] = api_key
+                # Reset client
+                st.session_state.openai_client = None
+                # Test
+                success, message = test_openai_connection()
+                if success:
+                    st.success(f"✅ Connected: {message}")
+                else:
+                    st.error(f"❌ Failed: {message}")
+            else:
+                st.warning("Please enter an API key first")
+
+    with col2:
+        if st.button("Reset AI", use_container_width=True):
+            st.session_state.openai_client = None
+            st.session_state.openai_available = False
+            st.session_state.openai_error = "Reset - configure API key"
+            st.success("AI settings reset")
+            st.rerun()
+
+    # Instructions
+    st.markdown("---")
+    with st.expander("📖 Setup Instructions"):
+        st.markdown("""
+        1. **Get API key** from [OpenAI Platform](https://platform.openai.com/api-keys)
+        2. **For Streamlit Cloud:** Add to Settings → Secrets:
+           ```toml
+           OPENAI_API_KEY = "sk-your-key-here"
+           ```
+        3. **Test connection** using the button above
+        """)
+
+    # System info
+    st.markdown("---")
+    with st.expander("🖥️ System Information"):
+        st.write(f"**Streamlit:** {st.__version__}")
+        st.write(f"**Python:** {sys.version.split()[0]}")
+        
+        try:
+            import pandas as pd
+            st.write(f"**Pandas:** {pd.__version__}")
+        except:
+            st.write("**Pandas:** Not available")
+        
+        try:
+            import openai
+            st.write(f"**OpenAI:** {openai.__version__}")
+        except:
+            st.write("**OpenAI:** Not available")
+
+
+    col1, col2 = st.columns(2)
+    
+    with col1:
+<<<<<<< HEAD
         if st.button("Test Connection", use_container_width=True):
             if api_key:
                 # Temporarily set key
@@ -738,6 +797,104 @@ def show_settings_page():
             st.write(f"**OpenAI:** {openai.__version__}")
         except:
             st.write("**OpenAI:** Not available")
+=======
+        if st.button("Run Security Scan", key="scan_btn"):
+            st.info("Security scan initiated...")
+    
+    with col2:
+        if st.button("View All Incidents", key="incidents_btn"):
+            st.info("Loading incident log...")
+
+def show_data_analytics_tab():
+    """Data analytics dashboard tab"""
+    st.header("📊 Data Analytics Dashboard")
+    
+    # Data metrics
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("Data Processed", "2.4 TB", "+0.3 TB")
+    with col2:
+        st.metric("Active Jobs", "12", "+2")
+    with col3:
+        st.metric("Accuracy Rate", "96.2%", "+1.8%")
+    
+    # Sample data chart
+    st.subheader("Data Processing Trend")
+    
+    # Generate sample data
+    dates = pd.date_range(start='2024-01-01', periods=30, freq='D')
+    data = pd.DataFrame({
+        'Date': dates,
+        'Processed (GB)': np.random.randint(100, 1000, 30),
+        'Errors': np.random.randint(0, 10, 30),
+        'Success Rate (%)': np.random.randint(85, 100, 30)
+    })
+    
+    st.line_chart(data.set_index('Date')[['Processed (GB)', 'Errors']])
+    
+    # Data quality
+    st.subheader("Data Quality Metrics")
+    
+    quality_data = pd.DataFrame({
+        "Dataset": ["Customer Data", "Sales Data", "Inventory", "Logs"],
+        "Completeness": [92, 85, 96, 78],
+        "Accuracy": [88, 91, 94, 82],
+        "Timeliness": [95, 87, 90, 76]
+    })
+    
+    st.dataframe(quality_data, use_container_width=True)
+
+def show_operations_tab():
+    """Operations dashboard tab"""
+    st.header("🖥️ IT Operations Dashboard")
+    
+    # System health indicators
+    st.subheader("System Health")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.progress(0.75, text="CPU: 75%")
+        st.progress(0.88, text="Memory: 88%")
+    
+    with col2:
+        st.progress(0.45, text="Disk: 45%")
+        st.progress(0.95, text="Network: 95%")
+    
+    # Service status
+    st.subheader("Service Status")
+    
+    services = [
+        {"Service": "Web Server", "Status": "✅ Running", "Uptime": "99.9%"},
+        {"Service": "Database", "Status": "✅ Running", "Uptime": "99.8%"},
+        {"Service": "API Gateway", "Status": "⚠️ Slow", "Uptime": "98.5%"},
+        {"Service": "Cache", "Status": "✅ Running", "Uptime": "99.7%"},
+        {"Service": "Monitoring", "Status": "✅ Running", "Uptime": "100%"},
+    ]
+    
+    for service in services:
+        cols = st.columns([2, 1, 1])
+        with cols[0]:
+            st.write(f"**{service['Service']}**")
+        with cols[1]:
+            st.write(service['Status'])
+        with cols[2]:
+            st.write(service['Uptime'])
+    
+    # Recent system alerts
+    st.subheader("Recent Alerts")
+    
+    alerts = [
+        {"Time": "09:30", "Alert": "High CPU Usage", "Severity": "Warning"},
+        {"Time": "11:15", "Alert": "Memory Pressure", "Severity": "Critical"},
+        {"Time": "13:45", "Alert": "Network Latency", "Severity": "Warning"},
+    ]
+    
+    for alert in alerts:
+        severity_color = "🔴" if alert["Severity"] == "Critical" else "🟡"
+        st.write(f"**{alert['Time']}** {severity_color} {alert['Alert']}")
+>>>>>>> 23265a8 (dashboard update and dependency upgrade)
 
 if __name__ == "__main__":
     main()
