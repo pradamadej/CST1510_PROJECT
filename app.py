@@ -8,6 +8,13 @@ import os
 import sys
 from datetime import datetime
 
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 # Set page config - MUST BE FIRST
 st.set_page_config(
     page_title="Intelligence Platform",
